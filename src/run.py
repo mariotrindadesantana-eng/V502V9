@@ -54,6 +54,7 @@ from routes.pdf_generator import pdf_bp
 from routes.monitoring import monitoring_bp
 from routes.user import user_bp
 from routes.progress import progress_bp
+from routes.files import files_bp
 from services.production_search_manager import production_search_manager
 from services.production_content_extractor import production_content_extractor
 
@@ -109,6 +110,7 @@ def create_app():
     app.register_blueprint(monitoring_bp, url_prefix='/api')
     app.register_blueprint(user_bp, url_prefix='/api')
     app.register_blueprint(progress_bp, url_prefix='/api')
+    app.register_blueprint(files_bp, url_prefix='/api')
 
     # Service Worker route
     @app.route('/sw.js')

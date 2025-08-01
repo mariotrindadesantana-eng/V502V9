@@ -5,6 +5,7 @@ groq==0.4.2
 requests==2.31.0
 google-generativeai==0.3.2
 supabase==2.0.2
+postgrest==0.10.8
 psycopg2-binary==2.9.7
 pandas==2.3.1
 openpyxl==3.1.2
@@ -42,3 +43,4 @@ readability-lxml
 trafilatura
 pdfplumber==0.11.7
 pypdf==4.0.1
+uuid

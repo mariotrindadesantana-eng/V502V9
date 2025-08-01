@@ -162,36 +162,34 @@ def analyze_market():
             db_record = db_manager.create_analysis({
                 'segmento': data.get('segmento'),
                 'produto': data.get('produto'),
-                'descricao': data.get('dados_adicionais'),
-                'preco': data.get('preco'),
                 'publico': data.get('publico'),
-                'concorrentes': data.get('concorrentes'),
-                'dados_adicionais': data.get('dados_adicionais'),
+                'preco': data.get('preco'),
                 'objetivo_receita': data.get('objetivo_receita'),
                 'orcamento_marketing': data.get('orcamento_marketing'),
                 'prazo_lancamento': data.get('prazo_lancamento'),
+                'concorrentes': data.get('concorrentes'),
+                'dados_adicionais': data.get('dados_adicionais'),
+                'query': data.get('query'),
                 'status': 'completed',
-                'avatar_data': analysis_result.get('avatar_ultra_detalhado'),
-                'positioning_data': analysis_result.get('escopo'),
-                'competition_data': analysis_result.get('analise_concorrencia_detalhada'),
-                'marketing_data': analysis_result.get('estrategia_palavras_chave'),
-                'metrics_data': analysis_result.get('metricas_performance_detalhadas'),
-                'funnel_data': analysis_result.get('funil_vendas_detalhado'),
-                'market_intelligence': analysis_result.get('pesquisa_web_massiva'),
-                'action_plan': analysis_result.get('plano_acao_detalhado'),
-                'comprehensive_analysis': analysis_result
+                **analysis_result  # Inclui toda a análise
             })
             
             if db_record:
-                analysis_result['database_id'] = db_record['id']
-                logger.info(f"✅ Análise salva com ID: {db_record['id']}")
+                if db_record.get('local_only'):
+                    analysis_result['local_only'] = True
+                    analysis_result['local_files'] = db_record.get('local_files')
+                    logger.info(f"✅ Análise salva localmente: {len(db_record['local_files']['files'])} arquivos")
+                else:
+                    analysis_result['database_id'] = db_record['id']
+                    analysis_result['local_files'] = db_record.get('local_files')
+                    logger.info(f"✅ Análise salva: Supabase ID {db_record['id']} + arquivos locais")
             else:
-                logger.warning("⚠️ Falha ao salvar no banco, mas análise continua")
+                logger.warning("⚠️ Falha ao salvar análise")
                 
         except Exception as e:
             logger.error(f"❌ Erro ao salvar no banco: {str(e)}")
             # Não falha a análise por erro no banco
-            analysis_result['database_warning'] = f"Falha ao salvar no banco: {str(e)}"
+            analysis_result['database_warning'] = f"Falha ao salvar: {str(e)}"
         
         # Calcula tempo de processamento
         end_time = time.time()

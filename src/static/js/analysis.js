@@ -1,475 +1,122 @@
-// ARQV30 Enhanced v2.0 - Analysis JavaScript with Robust Content Extraction
+// ARQV30 Enhanced v2.0 - Analysis JavaScript
 
 class AnalysisManager {
     constructor() {
-        this.sessionId = window.app?.sessionId || this.generateSessionId();
-        this.isAnalyzing = false;
-        this.progressInterval = null;
         this.currentAnalysis = null;
-        this.extractorStats = {};
-        
+        this.sessionId = this.generateSessionId();
+        this.progressInterval = null;
         this.init();
     }
 
     init() {
-        this.setupEventListeners();
-        this.loadExtractorStats();
+        this.setupFormSubmission();
+        this.setupKeyboardShortcuts();
+        this.checkSystemStatus();
     }
 
     generateSessionId() {
         return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 
-    setupEventListeners() {
-        // Form submission
+    setupFormSubmission() {
         const form = document.getElementById('analysisForm');
-        if (form) {
-            form.addEventListener('submit', (e) => {
+        if (!form) return;
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.startAnalysis();
+        });
+    }
+
+    setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+Enter para analisar
+            if (e.ctrlKey && e.key === 'Enter') {
                 e.preventDefault();
                 this.startAnalysis();
-            });
-        }
-
-        // Test buttons
-        this.setupTestButtons();
-    }
-
-    setupTestButtons() {
-        // Add test buttons to the interface
-        const testButtonsHtml = `
-            <div class="test-section" style="margin-top: 20px; padding: 20px; background: var(--glass-bg); border-radius: 12px; border: 1px solid var(--glass-border);">
-                <h4 style="color: var(--accent-primary); margin-bottom: 15px;">🧪 Testes do Sistema</h4>
-                <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                    <button class="btn-secondary" onclick="analysisManager.testExtraction()">
-                        <i class="fas fa-download"></i> Testar Extração
-                    </button>
-                    <button class="btn-secondary" onclick="analysisManager.testSearch()">
-                        <i class="fas fa-search"></i> Testar Busca
-                    </button>
-                    <button class="btn-secondary" onclick="analysisManager.showExtractorStats()">
-                        <i class="fas fa-chart-bar"></i> Stats Extratores
-                    </button>
-                    <button class="btn-secondary" onclick="analysisManager.resetExtractors()">
-                        <i class="fas fa-refresh"></i> Reset Extratores
-                    </button>
-                </div>
-            </div>
-        `;
-
-        const formActions = document.querySelector('.form-actions');
-        if (formActions) {
-            formActions.insertAdjacentHTML('beforebegin', testButtonsHtml);
-        }
-    }
-
-    async loadExtractorStats() {
-        try {
-            const response = await fetch('/api/extractor_stats');
-            if (response.ok) {
-                this.extractorStats = await response.json();
-                this.updateExtractorStatusDisplay();
             }
-        } catch (error) {
-            console.error('Erro ao carregar stats dos extratores:', error);
-        }
-    }
-
-    updateExtractorStatusDisplay() {
-        const statusBar = document.getElementById('apiStatus');
-        if (statusBar && this.extractorStats.stats) {
-            const stats = this.extractorStats.stats;
-            const globalStats = stats.global || {};
             
-            const successRate = globalStats.success_rate || 0;
-            const totalExtractions = globalStats.total_extractions || 0;
-            
-            if (successRate >= 80) {
-                statusBar.innerHTML = `
-                    <i class="fas fa-check-circle" style="color: var(--accent-tertiary);"></i>
-                    <span>Extratores: ${successRate.toFixed(1)}% sucesso (${totalExtractions} extrações)</span>
-                `;
-            } else if (successRate >= 50) {
-                statusBar.innerHTML = `
-                    <i class="fas fa-exclamation-triangle" style="color: var(--accent-gold);"></i>
-                    <span>Extratores: ${successRate.toFixed(1)}% sucesso (${totalExtractions} extrações)</span>
-                `;
-            } else {
-                statusBar.innerHTML = `
-                    <i class="fas fa-times-circle" style="color: #ff6b6b;"></i>
-                    <span>Extratores: ${successRate.toFixed(1)}% sucesso (${totalExtractions} extrações)</span>
-                `;
-            }
-        }
-    }
-
-    async testExtraction() {
-        const testUrl = prompt('Digite uma URL para testar a extração:', 'https://g1.globo.com/tecnologia/');
-        
-        if (!testUrl) return;
-
-        try {
-            window.app?.showInfo('Testando extração de conteúdo...');
-
-            const response = await fetch('/api/test_extraction', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ url: testUrl })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                window.app?.showSuccess(`Extração bem-sucedida! ${result.content_length} caracteres extraídos. Qualidade: ${result.validation.score}%`);
-                
-                // Mostra preview do conteúdo
-                this.showContentPreview(result);
-            } else {
-                window.app?.showError(`Falha na extração: ${result.error}`);
-            }
-
-            // Atualiza stats
-            this.extractorStats = { stats: result.extractor_stats };
-            this.updateExtractorStatusDisplay();
-
-        } catch (error) {
-            console.error('Erro no teste de extração:', error);
-            window.app?.showError('Erro no teste de extração');
-        }
-    }
-
-    showContentPreview(result) {
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(10px);
-        `;
-
-        const content = document.createElement('div');
-        content.style.cssText = `
-            background: var(--bg-surface);
-            border-radius: 16px;
-            padding: 30px;
-            max-width: 80%;
-            max-height: 80%;
-            overflow-y: auto;
-            border: 1px solid var(--glass-border);
-            box-shadow: var(--shadow-floating);
-        `;
-
-        content.innerHTML = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3 style="color: var(--accent-primary); margin: 0;">📄 Preview do Conteúdo Extraído</h3>
-                <button onclick="this.closest('.modal').remove()" style="
-                    background: none; 
-                    border: none; 
-                    color: var(--text-muted); 
-                    font-size: 24px; 
-                    cursor: pointer;
-                ">×</button>
-            </div>
-            
-            <div style="margin-bottom: 20px;">
-                <strong style="color: var(--accent-secondary);">URL:</strong> 
-                <span style="color: var(--text-secondary); word-break: break-all;">${result.url}</span>
-            </div>
-            
-            <div style="margin-bottom: 20px;">
-                <strong style="color: var(--accent-secondary);">Qualidade:</strong> 
-                <span style="color: ${result.validation.valid ? 'var(--accent-tertiary)' : '#ff6b6b'};">
-                    ${result.validation.score}% - ${result.validation.valid ? 'VÁLIDO' : 'INVÁLIDO'}
-                </span>
-            </div>
-            
-            <div style="margin-bottom: 20px;">
-                <strong style="color: var(--accent-secondary);">Tamanho:</strong> 
-                <span style="color: var(--text-primary);">${result.content_length} caracteres</span>
-            </div>
-            
-            <div style="background: var(--glass-bg); padding: 20px; border-radius: 8px; border: 1px solid var(--glass-border);">
-                <h4 style="color: var(--accent-primary); margin-bottom: 10px;">Conteúdo:</h4>
-                <pre style="
-                    white-space: pre-wrap; 
-                    color: var(--text-primary); 
-                    font-family: 'Inter', sans-serif; 
-                    line-height: 1.6;
-                    max-height: 300px;
-                    overflow-y: auto;
-                ">${result.content_preview}</pre>
-            </div>
-        `;
-
-        modal.className = 'modal';
-        modal.appendChild(content);
-        document.body.appendChild(modal);
-
-        // Close on background click
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
+            // Ctrl+S para salvar
+            if (e.ctrlKey && e.key === 's') {
+                e.preventDefault();
+                if (this.currentAnalysis) {
+                    this.saveAnalysisLocally(this.currentAnalysis);
+                }
             }
         });
     }
 
-    async testSearch() {
-        const testQuery = prompt('Digite uma query para testar a busca:', 'mercado digital Brasil 2024');
+    async checkSystemStatus() {
+        try {
+            const response = await fetch('/api/app_status');
+            const status = await response.json();
+            
+            this.updateStatusIndicator(status);
+            this.updateSystemStatusBar(status);
+            
+        } catch (error) {
+            console.error('Erro ao verificar status:', error);
+            this.updateStatusIndicator({ status: 'error' });
+        }
+    }
+
+    updateStatusIndicator(status) {
+        const indicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
         
-        if (!testQuery) return;
+        if (!indicator || !statusText) return;
 
-        try {
-            window.app?.showInfo('Testando sistema de busca...');
-
-            const response = await fetch('/api/test_search', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ 
-                    query: testQuery,
-                    max_results: 5
-                })
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                window.app?.showSuccess(`Busca bem-sucedida! ${result.results_count} resultados encontrados`);
-                console.log('Resultados da busca:', result.results);
-            } else {
-                window.app?.showError(`Falha na busca: ${result.error}`);
-            }
-
-        } catch (error) {
-            console.error('Erro no teste de busca:', error);
-            window.app?.showError('Erro no teste de busca');
+        indicator.className = 'status-indicator';
+        
+        if (status.status === 'production' || status.status === 'development') {
+            indicator.classList.add('online');
+            statusText.textContent = 'Sistema Online';
+        } else {
+            indicator.classList.add('offline');
+            statusText.textContent = 'Sistema Offline';
         }
     }
 
-    async showExtractorStats() {
-        try {
-            const response = await fetch('/api/extractor_stats');
-            const result = await response.json();
-
-            if (result.success) {
-                this.displayExtractorStatsModal(result.stats);
-            } else {
-                window.app?.showError('Erro ao obter estatísticas dos extratores');
-            }
-
-        } catch (error) {
-            console.error('Erro ao obter stats:', error);
-            window.app?.showError('Erro ao obter estatísticas');
-        }
-    }
-
-    displayExtractorStatsModal(stats) {
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(10px);
-        `;
-
-        const content = document.createElement('div');
-        content.style.cssText = `
-            background: var(--bg-surface);
-            border-radius: 16px;
-            padding: 30px;
-            max-width: 90%;
-            max-height: 80%;
-            overflow-y: auto;
-            border: 1px solid var(--glass-border);
-            box-shadow: var(--shadow-floating);
-        `;
-
-        let statsHtml = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <h3 style="color: var(--accent-primary); margin: 0;">📊 Estatísticas dos Extratores</h3>
-                <button onclick="this.closest('.modal').remove()" style="
-                    background: none; 
-                    border: none; 
-                    color: var(--text-muted); 
-                    font-size: 24px; 
-                    cursor: pointer;
-                ">×</button>
-            </div>
-        `;
-
-        // Estatísticas globais
-        if (stats.global) {
-            const global = stats.global;
-            statsHtml += `
-                <div style="background: var(--glass-bg); padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid var(--glass-border);">
-                    <h4 style="color: var(--accent-secondary); margin-bottom: 15px;">🌐 Estatísticas Globais</h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
-                        <div>
-                            <strong style="color: var(--text-secondary);">Total de Extrações:</strong>
-                            <div style="color: var(--accent-primary); font-size: 24px; font-weight: 700;">${global.total_extractions}</div>
-                        </div>
-                        <div>
-                            <strong style="color: var(--text-secondary);">Sucessos:</strong>
-                            <div style="color: var(--accent-tertiary); font-size: 24px; font-weight: 700;">${global.total_successes}</div>
-                        </div>
-                        <div>
-                            <strong style="color: var(--text-secondary);">Falhas:</strong>
-                            <div style="color: #ff6b6b; font-size: 24px; font-weight: 700;">${global.total_failures}</div>
-                        </div>
-                        <div>
-                            <strong style="color: var(--text-secondary);">Taxa de Sucesso:</strong>
-                            <div style="color: ${global.success_rate >= 80 ? 'var(--accent-tertiary)' : global.success_rate >= 50 ? 'var(--accent-gold)' : '#ff6b6b'}; font-size: 24px; font-weight: 700;">${global.success_rate}%</div>
-                        </div>
-                    </div>
-                </div>
+    updateSystemStatusBar(status) {
+        const apiStatus = document.getElementById('apiStatus');
+        const extractorStatus = document.getElementById('extractorStatus');
+        
+        if (apiStatus) {
+            const services = status.services || {};
+            const searchProviders = services.search_providers || {};
+            
+            apiStatus.innerHTML = `
+                <i class="fas fa-cog"></i>
+                <span>APIs: ${searchProviders.available || 0}/${searchProviders.total || 0}</span>
             `;
         }
-
-        // Estatísticas por extrator
-        statsHtml += `<div style="display: grid; gap: 15px;">`;
-
-        for (const [extractorName, extractorStats] of Object.entries(stats)) {
-            if (extractorName === 'global') continue;
-
-            const available = extractorStats.available;
-            const successRate = extractorStats.success_rate || 0;
-            const usageCount = extractorStats.usage_count || 0;
-
-            statsHtml += `
-                <div style="background: var(--glass-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--glass-border);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h5 style="color: var(--accent-primary); margin: 0; text-transform: capitalize;">${extractorName}</h5>
-                        <span style="
-                            padding: 4px 12px; 
-                            border-radius: 20px; 
-                            font-size: 12px; 
-                            font-weight: 600;
-                            background: ${available ? 'rgba(6, 255, 165, 0.2)' : 'rgba(255, 107, 107, 0.2)'};
-                            color: ${available ? 'var(--accent-tertiary)' : '#ff6b6b'};
-                            border: 1px solid ${available ? 'var(--accent-tertiary)' : '#ff6b6b'};
-                        ">
-                            ${available ? 'DISPONÍVEL' : 'INDISPONÍVEL'}
-                        </span>
-                    </div>
-                    
-                    ${available ? `
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; font-size: 14px;">
-                            <div>
-                                <strong style="color: var(--text-secondary);">Usos:</strong>
-                                <div style="color: var(--text-primary);">${usageCount}</div>
-                            </div>
-                            <div>
-                                <strong style="color: var(--text-secondary);">Sucessos:</strong>
-                                <div style="color: var(--accent-tertiary);">${extractorStats.success_count || 0}</div>
-                            </div>
-                            <div>
-                                <strong style="color: var(--text-secondary);">Erros:</strong>
-                                <div style="color: #ff6b6b;">${extractorStats.error_count || 0}</div>
-                            </div>
-                            <div>
-                                <strong style="color: var(--text-secondary);">Taxa:</strong>
-                                <div style="color: ${successRate >= 80 ? 'var(--accent-tertiary)' : successRate >= 50 ? 'var(--accent-gold)' : '#ff6b6b'};">${successRate}%</div>
-                            </div>
-                            <div>
-                                <strong style="color: var(--text-secondary);">Tempo Médio:</strong>
-                                <div style="color: var(--text-primary);">${extractorStats.avg_response_time || 0}s</div>
-                            </div>
-                        </div>
-                    ` : `
-                        <div style="color: var(--text-muted); font-style: italic;">
-                            ${extractorStats.reason || 'Não disponível'}
-                        </div>
-                    `}
-                </div>
+        
+        if (extractorStatus) {
+            extractorStatus.innerHTML = `
+                <i class="fas fa-download"></i>
+                <span>Extratores: Ativos</span>
             `;
-        }
-
-        statsHtml += `</div>`;
-
-        content.innerHTML = statsHtml;
-        modal.className = 'modal';
-        modal.appendChild(content);
-        document.body.appendChild(modal);
-
-        // Close on background click
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
-            }
-        });
-    }
-
-    async resetExtractors() {
-        if (!confirm('Tem certeza que deseja resetar as estatísticas dos extratores?')) {
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/reset_extractors', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({})
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                window.app?.showSuccess('Estatísticas dos extratores resetadas com sucesso!');
-                this.extractorStats = { stats: result.stats };
-                this.updateExtractorStatusDisplay();
-            } else {
-                window.app?.showError(`Erro ao resetar: ${result.error}`);
-            }
-
-        } catch (error) {
-            console.error('Erro ao resetar extratores:', error);
-            window.app?.showError('Erro ao resetar extratores');
         }
     }
 
     async startAnalysis() {
-        if (this.isAnalyzing) {
-            window.app?.showWarning('Análise já em andamento!');
+        const formData = this.collectFormData();
+        
+        if (!this.validateFormData(formData)) {
             return;
         }
 
         try {
-            // Coleta dados do formulário
-            const formData = this.collectFormData();
-            
-            // Validação básica
-            if (!formData.segmento) {
-                window.app?.showError('Segmento é obrigatório!');
-                return;
-            }
-
             // Adiciona session ID
             formData.session_id = this.sessionId;
+            
+            // Adiciona arquivos enviados
+            const uploadedFiles = window.uploadManager ? window.uploadManager.getUploadedFiles() : [];
+            formData.uploaded_files = uploadedFiles;
 
-            // Inicia análise
-            this.isAnalyzing = true;
             this.showProgressSection();
             this.startProgressTracking();
 
-            // Faz requisição de análise
             const response = await fetch('/api/analyze', {
                 method: 'POST',
                 headers: {
@@ -481,17 +128,20 @@ class AnalysisManager {
             const result = await response.json();
 
             if (response.ok && result) {
-                this.onAnalysisSuccess(result);
+                this.currentAnalysis = result;
+                this.hideProgressSection();
+                this.displayResults(result);
+                this.showSuccess('Análise concluída com sucesso!');
             } else {
-                this.onAnalysisError(result.error || 'Erro desconhecido', result);
+                this.hideProgressSection();
+                this.showError(result.error || 'Erro na análise');
+                console.error('Erro na análise:', result);
             }
 
         } catch (error) {
+            this.hideProgressSection();
+            this.showError('Erro de conexão: ' + error.message);
             console.error('Erro na análise:', error);
-            this.onAnalysisError(error.message);
-        } finally {
-            this.isAnalyzing = false;
-            this.stopProgressTracking();
         }
     }
 
@@ -500,172 +150,35 @@ class AnalysisManager {
         const formData = new FormData(form);
         const data = {};
 
-        // Converte FormData para objeto
         for (let [key, value] of formData.entries()) {
             data[key] = value;
-        }
-
-        // Adiciona arquivos enviados
-        const uploadedFiles = window.uploadManager?.getUploadedFiles() || [];
-        if (uploadedFiles.length > 0) {
-            data.attachments = uploadedFiles;
         }
 
         return data;
     }
 
+    validateFormData(data) {
+        if (!data.segmento || data.segmento.trim().length < 3) {
+            this.showError('Segmento de mercado é obrigatório (mínimo 3 caracteres)');
+            return false;
+        }
+
+        return true;
+    }
+
     showProgressSection() {
         const progressArea = document.getElementById('progressArea');
-        const resultsArea = document.getElementById('resultsArea');
-        
         if (progressArea) {
             progressArea.style.display = 'block';
             progressArea.scrollIntoView({ behavior: 'smooth' });
-        }
-        
-        if (resultsArea) {
-            resultsArea.style.display = 'none';
         }
 
         // Desabilita botão de análise
         const analyzeBtn = document.getElementById('analyzeBtn');
         if (analyzeBtn) {
-            window.app?.setButtonLoading(analyzeBtn, true);
-        }
-    }
-
-    startProgressTracking() {
-        this.updateProgress(0, 'Iniciando análise ultra-detalhada...');
-        
-        // Simula progresso inicial
-        let step = 0;
-        const steps = [
-            'Validando dados de entrada...',
-            'Executando pesquisa web massiva REAL...',
-            'Extraindo conteúdo com múltiplos extratores...',
-            'Validando qualidade do conteúdo...',
-            'Analisando com múltiplas IAs...',
-            'Gerando avatar ultra-detalhado...',
-            'Criando drivers mentais customizados...',
-            'Desenvolvendo provas visuais...',
-            'Construindo sistema anti-objeção...',
-            'Arquitetando pré-pitch invisível...',
-            'Predizendo futuro do mercado...',
-            'Consolidando insights exclusivos...',
-            'Finalizando análise GIGANTE...'
-        ];
-
-        this.progressInterval = setInterval(() => {
-            if (step < steps.length - 1) {
-                step++;
-                this.updateProgress(step, steps[step]);
-            }
-        }, 3000);
-    }
-
-    stopProgressTracking() {
-        if (this.progressInterval) {
-            clearInterval(this.progressInterval);
-            this.progressInterval = null;
-        }
-    }
-
-    updateProgress(step, message) {
-        const totalSteps = 13;
-        const percentage = (step / totalSteps) * 100;
-
-        // Atualiza barra de progresso
-        const progressFill = document.querySelector('.progress-fill');
-        if (progressFill) {
-            progressFill.style.width = percentage + '%';
-        }
-
-        // Atualiza mensagem
-        const currentStep = document.getElementById('currentStep');
-        if (currentStep) {
-            currentStep.textContent = message;
-        }
-
-        // Atualiza contador
-        const stepCounter = document.getElementById('stepCounter');
-        if (stepCounter) {
-            stepCounter.textContent = `${step}/${totalSteps}`;
-        }
-
-        // Atualiza tempo estimado
-        const estimatedTime = document.getElementById('estimatedTime');
-        if (estimatedTime) {
-            const remaining = Math.max(0, (totalSteps - step) * 15); // 15s por step
-            const minutes = Math.floor(remaining / 60);
-            const seconds = remaining % 60;
-            estimatedTime.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-        }
-    }
-
-    onAnalysisSuccess(result) {
-        this.currentAnalysis = result;
-        
-        // Completa progresso
-        this.updateProgress(13, '🎉 Análise concluída com sucesso!');
-        
-        setTimeout(() => {
-            this.hideProgressSection();
-            this.showResults(result);
-            window.app?.showSuccess('Análise ultra-detalhada concluída com sucesso!');
-        }, 1000);
-    }
-
-    onAnalysisError(error, result = null) {
-        console.error('Erro na análise:', error);
-        
-        this.hideProgressSection();
-        
-        // Mostra erro detalhado
-        let errorMessage = `Erro na análise: ${error}`;
-        
-        if (result && result.recommendation) {
-            errorMessage += `\n\nRecomendação: ${result.recommendation}`;
-        }
-        
-        if (result && result.required_apis) {
-            errorMessage += `\n\nAPIs necessárias:\n${result.required_apis.join('\n')}`;
-        }
-        
-        // Mostra status dos provedores se disponível
-        if (result && (result.ai_status || result.search_status)) {
-            console.log('Status dos provedores:', {
-                ai: result.ai_status,
-                search: result.search_status
-            });
-        }
-        
-        // Se é erro de dados insuficientes, sugere retry
-        if (result && result.retry_suggested && result.fallback_available) {
-            errorMessage += '\n\n🔄 Você pode tentar novamente com informações mais específicas.';
-            
-            // Adiciona botão de retry
-            setTimeout(() => {
-                const retryBtn = document.createElement('button');
-                retryBtn.className = 'btn-secondary';
-                retryBtn.innerHTML = '<i class="fas fa-redo"></i> Tentar Novamente';
-                retryBtn.onclick = () => {
-                    retryBtn.remove();
-                    this.startAnalysis();
-                };
-                
-                const formActions = document.querySelector('.form-actions');
-                if (formActions) {
-                    formActions.appendChild(retryBtn);
-                }
-            }, 2000);
-        }
-        
-        window.app?.showError(errorMessage);
-        
-        // Reabilita botão
-        const analyzeBtn = document.getElementById('analyzeBtn');
-        if (analyzeBtn) {
-            window.app?.setButtonLoading(analyzeBtn, false);
+            analyzeBtn.disabled = true;
+            analyzeBtn.classList.add('loading');
+            analyzeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Analisando...</span>';
         }
     }
 
@@ -674,48 +187,130 @@ class AnalysisManager {
         if (progressArea) {
             progressArea.style.display = 'none';
         }
-        
-        // Reabilita botão
+
+        // Reabilita botão de análise
         const analyzeBtn = document.getElementById('analyzeBtn');
         if (analyzeBtn) {
-            window.app?.setButtonLoading(analyzeBtn, false);
+            analyzeBtn.disabled = false;
+            analyzeBtn.classList.remove('loading');
+            analyzeBtn.innerHTML = '<i class="fas fa-magic"></i> <span>Gerar Análise Ultra-Detalhada</span>';
+        }
+
+        if (this.progressInterval) {
+            clearInterval(this.progressInterval);
+            this.progressInterval = null;
         }
     }
 
-    showResults(analysis) {
+    startProgressTracking() {
+        let progress = 0;
+        let step = 0;
+        const steps = [
+            "🔍 Coletando dados do formulário",
+            "📊 Processando anexos inteligentes", 
+            "🌐 Realizando pesquisa profunda massiva",
+            "🧠 Analisando com múltiplas IAs",
+            "👤 Criando avatar arqueológico completo",
+            "🧠 Gerando drivers mentais customizados",
+            "🎭 Desenvolvendo provas visuais instantâneas",
+            "🛡️ Construindo sistema anti-objeção",
+            "🎯 Arquitetando pré-pitch invisível",
+            "⚔️ Mapeando concorrência profunda",
+            "📈 Calculando métricas e projeções",
+            "🔮 Predizendo futuro do mercado",
+            "✨ Consolidando insights exclusivos"
+        ];
+
+        this.progressInterval = setInterval(() => {
+            if (progress < 95) {
+                progress += Math.random() * 3;
+                step = Math.min(Math.floor(progress / 8), steps.length - 1);
+                
+                this.updateProgress(progress, step, steps[step]);
+            }
+        }, 2000);
+    }
+
+    updateProgress(percentage, stepIndex, stepMessage) {
+        const progressFill = document.querySelector('.progress-fill');
+        const currentStep = document.getElementById('currentStep');
+        const stepCounter = document.getElementById('stepCounter');
+        const estimatedTime = document.getElementById('estimatedTime');
+
+        if (progressFill) {
+            progressFill.style.width = Math.min(percentage, 100) + '%';
+        }
+
+        if (currentStep) {
+            currentStep.textContent = stepMessage;
+        }
+
+        if (stepCounter) {
+            stepCounter.textContent = `${stepIndex + 1}/13`;
+        }
+
+        if (estimatedTime) {
+            const remaining = Math.max(0, Math.floor((100 - percentage) / 2));
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            estimatedTime.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        }
+    }
+
+    displayResults(analysis) {
         const resultsArea = document.getElementById('resultsArea');
         if (!resultsArea) return;
 
         resultsArea.style.display = 'block';
         resultsArea.scrollIntoView({ behavior: 'smooth' });
 
-        // Renderiza cada seção
-        this.renderAvatarResults(analysis);
-        this.renderDriversResults(analysis);
-        this.renderCompetitionResults(analysis);
-        this.renderPositioningResults(analysis);
-        this.renderKeywordsResults(analysis);
-        this.renderMetricsResults(analysis);
-        this.renderActionPlanResults(analysis);
-        this.renderInsightsResults(analysis);
-        this.renderVisualProofsResults(analysis);
-        this.renderAntiObjectionResults(analysis);
-        this.renderPrePitchResults(analysis);
-        this.renderFutureResults(analysis);
-        this.renderResearchResults(analysis);
-        this.renderMetadataResults(analysis);
+        // Limpa resultados anteriores
+        this.clearPreviousResults();
 
-        // Habilita download PDF
-        this.enablePdfDownload(analysis);
+        // Exibe cada seção
+        this.displayAvatar(analysis.avatar_ultra_detalhado);
+        this.displayDrivers(analysis.drivers_mentais_customizados);
+        this.displayVisualProofs(analysis.provas_visuais_instantaneas);
+        this.displayAntiObjection(analysis.sistema_anti_objecao);
+        this.displayPrePitch(analysis.pre_pitch_invisivel);
+        this.displayPositioning(analysis.escopo);
+        this.displayCompetition(analysis.analise_concorrencia_detalhada);
+        this.displayKeywords(analysis.estrategia_palavras_chave);
+        this.displayMetrics(analysis.metricas_performance_detalhadas);
+        this.displayFunnel(analysis.funil_vendas_detalhado);
+        this.displayActionPlan(analysis.plano_acao_detalhado);
+        this.displayInsights(analysis.insights_exclusivos);
+        this.displayFuturePredictions(analysis.predicoes_futuro_completas);
+        this.displayResearch(analysis.pesquisa_web_massiva);
+        this.displayMetadata(analysis.metadata);
+
+        // Habilita botões de ação
+        this.enableResultActions();
     }
 
-    renderAvatarResults(analysis) {
-        const container = document.getElementById('avatarResults');
-        if (!container || !analysis.avatar_ultra_detalhado) return;
+    clearPreviousResults() {
+        const containers = [
+            'avatarResults', 'driversResults', 'visualProofsResults', 'antiObjectionResults',
+            'prePitchResults', 'positioningResults', 'competitionResults', 'keywordsResults',
+            'metricsResults', 'funnelResults', 'actionPlanResults', 'insightsResults',
+            'futureResults', 'researchResults', 'metadataResults'
+        ];
 
-        const avatar = analysis.avatar_ultra_detalhado;
-        
-        container.innerHTML = `
+        containers.forEach(containerId => {
+            const container = document.getElementById(containerId);
+            if (container) {
+                container.innerHTML = '';
+            }
+        });
+    }
+
+    displayAvatar(avatarData) {
+        if (!avatarData) return;
+
+        const container = document.getElementById('avatarResults');
+        if (!container) return;
+
+        let html = `
             <div class="result-section">
                 <div class="result-section-header">
                     <i class="fas fa-user-circle"></i>
@@ -723,567 +318,958 @@ class AnalysisManager {
                 </div>
                 <div class="result-section-content">
                     <div class="avatar-grid">
-                        ${this.renderAvatarCard('Perfil Demográfico', avatar.perfil_demografico, 'fas fa-chart-pie')}
-                        ${this.renderAvatarCard('Perfil Psicográfico', avatar.perfil_psicografico, 'fas fa-brain')}
-                    </div>
-                    
-                    ${this.renderAvatarList('Dores Viscerais', avatar.dores_viscerais, 'fas fa-heart-broken', '#ff6b6b')}
-                    ${this.renderAvatarList('Desejos Secretos', avatar.desejos_secretos, 'fas fa-star', 'var(--accent-tertiary)')}
-                    ${this.renderAvatarList('Objeções Reais', avatar.objecoes_reais, 'fas fa-shield-alt', 'var(--accent-gold)')}
-                </div>
-            </div>
         `;
-    }
 
-    renderAvatarCard(title, data, icon) {
-        if (!data) return '';
-        
-        const items = Object.entries(data).map(([key, value]) => `
-            <div class="avatar-item">
-                <span class="avatar-label">${key.replace(/_/g, ' ')}</span>
-                <span class="avatar-value">${value}</span>
-            </div>
-        `).join('');
-
-        return `
-            <div class="avatar-card">
-                <h5><i class="${icon}"></i> ${title}</h5>
-                ${items}
-            </div>
-        `;
-    }
-
-    renderAvatarList(title, items, icon, color) {
-        if (!items || !Array.isArray(items)) return '';
-        
-        const listItems = items.map(item => `
-            <li class="insight-item">
-                <i class="${icon}" style="color: ${color};"></i>
-                <span class="insight-text">${item}</span>
-            </li>
-        `).join('');
-
-        return `
-            <div style="margin-top: 30px;">
-                <h5 style="color: ${color}; margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
-                    <i class="${icon}"></i> ${title}
-                </h5>
-                <ul class="insight-list">${listItems}</ul>
-            </div>
-        `;
-    }
-
-    renderResearchResults(analysis) {
-        const container = document.getElementById('researchResults');
-        if (!container) return;
-        
-        // Verifica múltiplas possíveis estruturas de pesquisa
-        const research = analysis.pesquisa_web_massiva || 
-                        analysis.pesquisa_massiva || 
-                        analysis.dados_pesquisa_real ||
-                        analysis.research_data;
-        
-        if (!research) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-exclamation-triangle"></i>
-                        <h4>Pesquisa Web</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <div class="error-message">
-                            Dados de pesquisa não disponíveis nesta análise.
-                        </div>
-                    </div>
-                </div>
+        // Perfil Demográfico
+        if (avatarData.perfil_demografico) {
+            html += `
+                <div class="avatar-card">
+                    <h5><i class="fas fa-chart-pie"></i> Perfil Demográfico</h5>
             `;
-            return;
+            
+            for (const [key, value] of Object.entries(avatarData.perfil_demografico)) {
+                html += `
+                    <div class="avatar-item">
+                        <span class="avatar-label">${key.replace(/_/g, ' ')}</span>
+                        <span class="avatar-value">${value}</span>
+                    </div>
+                `;
+            }
+            html += `</div>`;
         }
 
-        
-        container.innerHTML = `
-            <div class="result-section">
-                <div class="result-section-header">
-                    <i class="fas fa-globe"></i>
-                    <h4>Pesquisa Web Massiva REAL</h4>
-                </div>
-                <div class="result-section-content">
-                    <div class="research-content">
-                        <div class="data-quality-indicator">
-                            <span class="quality-label">Qualidade dos Dados:</span>
-                            <span class="quality-value ${research.total_resultados > 0 ? 'real-data' : 'simulated-data'}">
-                                ${research.total_resultados > 0 ? '100% DADOS REAIS' : 'DADOS LIMITADOS'}
-                            </span>
-                        </div>
-                        
-                        <div class="research-stats">
-                            <h5 style="color: var(--accent-primary); margin-bottom: 15px;">📊 Estatísticas da Pesquisa</h5>
-                            <div class="stats-grid">
-                                <div class="stat-item">
-                                    <span class="stat-label">Queries Executadas</span>
-                                    <span class="stat-value">${research.total_queries || 0}</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-label">Resultados Encontrados</span>
-                                    <span class="stat-value">${research.total_resultados || 0}</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-label">Fontes Únicas</span>
-                                    <span class="stat-value">${research.fontes_unicas || 0}</span>
-                                </div>
-                                <div class="stat-item">
-                                    <span class="stat-label">Conteúdo Extraído</span>
-                                    <span class="stat-value">${(research.conteudo_extraido_chars || 0).toLocaleString()} chars</span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        ${research.queries_executadas ? `
-                            <div class="queries-executed">
-                                <h5 style="color: var(--accent-secondary); margin-bottom: 15px;">🔍 Queries Executadas</h5>
-                                <div class="results-list">
-                                    ${research.queries_executadas.slice(0, 10).map(query => `
-                                        <div class="result-item">
-                                            <span style="color: var(--text-primary);">${query}</span>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        ${(research.resultados_detalhados || research.sources) ? `
-                            <div class="detailed-results">
-                                <h5 style="color: var(--accent-tertiary); margin-bottom: 15px;">📄 Fontes Analisadas</h5>
-                                <div class="results-list">
-                                    ${(research.resultados_detalhados || research.sources).slice(0, 15).map(source => `
-                                        <div class="result-item">
-                                            <h5>${source.title || source.titulo || 'Fonte'}</h5>
-                                            <div class="result-url">${source.url}</div>
-                                            <div class="result-source">Fonte: ${source.source || source.fonte || 'Web'}</div>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        ${research.total_resultados === 0 ? `
-                            <div class="error-message">
-                                ⚠️ Pesquisa retornou poucos resultados. Considere usar termos mais específicos ou verificar conectividade.
-                            </div>
-                        ` : ''}
+        // Perfil Psicográfico
+        if (avatarData.perfil_psicografico) {
+            html += `
+                <div class="avatar-card">
+                    <h5><i class="fas fa-brain"></i> Perfil Psicográfico</h5>
+            `;
+            
+            for (const [key, value] of Object.entries(avatarData.perfil_psicografico)) {
+                html += `
+                    <div class="avatar-item">
+                        <span class="avatar-label">${key.replace(/_/g, ' ')}</span>
+                        <span class="avatar-value">${value}</span>
                     </div>
-                </div>
-            </div>
-        `;
+                `;
+            }
+            html += `</div>`;
+        }
+
+        html += `</div>`;
+
+        // Dores Viscerais
+        if (avatarData.dores_viscerais && Array.isArray(avatarData.dores_viscerais)) {
+            html += `
+                <div class="expandable-section">
+                    <div class="expandable-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="expandable-title">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Dores Viscerais (${avatarData.dores_viscerais.length})
+                        </div>
+                        <i class="fas fa-chevron-down expandable-icon"></i>
+                    </div>
+                    <div class="expandable-content">
+                        <ul class="insight-list">
+            `;
+            
+            avatarData.dores_viscerais.forEach(dor => {
+                html += `
+                    <li class="insight-item">
+                        <i class="fas fa-arrow-right"></i>
+                        <span class="insight-text">${dor}</span>
+                    </li>
+                `;
+            });
+            
+            html += `</ul></div></div>`;
+        }
+
+        // Desejos Secretos
+        if (avatarData.desejos_secretos && Array.isArray(avatarData.desejos_secretos)) {
+            html += `
+                <div class="expandable-section">
+                    <div class="expandable-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="expandable-title">
+                            <i class="fas fa-heart"></i>
+                            Desejos Secretos (${avatarData.desejos_secretos.length})
+                        </div>
+                        <i class="fas fa-chevron-down expandable-icon"></i>
+                    </div>
+                    <div class="expandable-content">
+                        <ul class="insight-list">
+            `;
+            
+            avatarData.desejos_secretos.forEach(desejo => {
+                html += `
+                    <li class="insight-item">
+                        <i class="fas fa-star"></i>
+                        <span class="insight-text">${desejo}</span>
+                    </li>
+                `;
+            });
+            
+            html += `</ul></div></div>`;
+        }
+
+        html += `</div></div>`;
+        container.innerHTML = html;
     }
 
-    // Métodos de renderização existentes (mantidos)
-    renderDriversResults(analysis) {
-        const container = document.getElementById('driversResults');
-        if (!container || !analysis.drivers_mentais_customizados) return;
+    displayDrivers(driversData) {
+        if (!driversData) return;
 
-        const drivers = analysis.drivers_mentais_customizados;
-        
-        container.innerHTML = `
+        const container = document.getElementById('driversResults');
+        if (!container) return;
+
+        let html = `
             <div class="result-section">
                 <div class="result-section-header">
                     <i class="fas fa-brain"></i>
                     <h4>Drivers Mentais Customizados</h4>
                 </div>
                 <div class="result-section-content">
-                    <div class="drivers-grid">
-                        ${drivers.map(driver => `
-                            <div class="driver-card">
-                                <h4>${driver.nome}</h4>
-                                <div class="driver-content">
-                                    <p><strong>Gatilho Central:</strong> ${driver.gatilho_central}</p>
-                                    <p><strong>Definição:</strong> ${driver.definicao_visceral}</p>
-                                    
-                                    ${driver.roteiro_ativacao ? `
-                                        <div class="driver-script">
-                                            <h6>Roteiro de Ativação</h6>
-                                            <p><strong>Pergunta:</strong> ${driver.roteiro_ativacao.pergunta_abertura}</p>
-                                            <p><strong>História:</strong> ${driver.roteiro_ativacao.historia_analogia}</p>
-                                            <p><strong>Comando:</strong> ${driver.roteiro_ativacao.comando_acao}</p>
-                                        </div>
-                                    ` : ''}
-                                    
-                                    ${driver.frases_ancoragem ? `
-                                        <div class="anchor-phrases">
-                                            <h6>Frases de Ancoragem</h6>
-                                            <ul>
-                                                ${driver.frases_ancoragem.map(frase => `<li>"${frase}"</li>`).join('')}
-                                            </ul>
-                                        </div>
-                                    ` : ''}
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            </div>
         `;
-    }
 
-    renderInsightsResults(analysis) {
-        const container = document.getElementById('insightsResults');
-        if (!container) return;
-        
-        // Verifica múltiplas possíveis estruturas de insights
-        const insights = analysis.insights_exclusivos || 
-                        analysis.insights_exclusivos_ultra ||
-                        analysis.insights ||
-                        [];
-        
-        if (!insights || insights.length === 0) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-lightbulb"></i>
-                        <h4>Insights Exclusivos</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <div class="error-message">
-                            Insights não foram gerados nesta análise. Tente novamente com mais informações.
+        // Drivers Customizados
+        if (driversData.drivers_customizados && Array.isArray(driversData.drivers_customizados)) {
+            html += `<div class="drivers-grid">`;
+            
+            driversData.drivers_customizados.forEach((driver, index) => {
+                html += `
+                    <div class="driver-card">
+                        <h4>Driver ${index + 1}: ${driver.nome || 'Driver Mental'}</h4>
+                        <div class="driver-content">
+                            <p><strong>Gatilho Central:</strong> ${driver.gatilho_central || 'N/A'}</p>
+                            <p><strong>Definição:</strong> ${driver.definicao_visceral || 'N/A'}</p>
+                `;
+                
+                if (driver.roteiro_ativacao) {
+                    html += `
+                        <div class="driver-script">
+                            <h6>Roteiro de Ativação</h6>
+                            <p><strong>Pergunta:</strong> ${driver.roteiro_ativacao.pergunta_abertura || 'N/A'}</p>
+                            <p><strong>História:</strong> ${driver.roteiro_ativacao.historia_analogia || 'N/A'}</p>
+                            <p><strong>Comando:</strong> ${driver.roteiro_ativacao.comando_acao || 'N/A'}</p>
                         </div>
-                    </div>
-                </div>
-            `;
-            return;
+                    `;
+                }
+                
+                if (driver.frases_ancoragem && Array.isArray(driver.frases_ancoragem)) {
+                    html += `
+                        <div class="anchor-phrases">
+                            <h6>Frases de Ancoragem</h6>
+                            <ul>
+                    `;
+                    driver.frases_ancoragem.forEach(frase => {
+                        html += `<li>"${frase}"</li>`;
+                    });
+                    html += `</ul></div>`;
+                }
+                
+                html += `</div></div>`;
+            });
+            
+            html += `</div>`;
         }
 
-        
-        container.innerHTML = `
+        html += `</div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayVisualProofs(proofsData) {
+        if (!proofsData || !Array.isArray(proofsData)) return;
+
+        const container = document.getElementById('visualProofsResults');
+        if (!container) return;
+
+        let html = `
             <div class="result-section">
                 <div class="result-section-header">
-                    <i class="fas fa-lightbulb"></i>
-                    <h4>Insights Exclusivos Ultra-Valiosos (${insights.length})</h4>
+                    <i class="fas fa-eye"></i>
+                    <h4>Provas Visuais Instantâneas</h4>
                 </div>
                 <div class="result-section-content">
                     <div class="insights-showcase">
-                        ${insights.map((insight, index) => `
-                            <div class="insight-card">
-                                <div class="insight-number">${index + 1}</div>
-                                <div class="insight-content">${insight}</div>
-                            </div>
-                        `).join('')}
-                    </div>
-                    
-                    ${insights.length < 10 ? `
-                        <div style="margin-top: 20px; padding: 15px; background: var(--bg-surface); border-radius: 12px; border-left: 4px solid var(--accent-gold);">
-                            <strong style="color: var(--accent-gold);">💡 Dica:</strong>
-                            <span style="color: var(--text-secondary);">
-                                Para obter mais insights, forneça informações mais detalhadas sobre seu segmento e público-alvo.
-                            </span>
-                        </div>
-                    ` : ''}
-                </div>
-            </div>
         `;
+
+        proofsData.forEach((prova, index) => {
+            html += `
+                <div class="insight-card">
+                    <div class="insight-number">${index + 1}</div>
+                    <div class="insight-content">
+                        <h5>${prova.nome || 'Prova Visual'}</h5>
+                        <p><strong>Conceito:</strong> ${prova.conceito_alvo || 'N/A'}</p>
+                        <p><strong>Experimento:</strong> ${prova.experimento || 'N/A'}</p>
+            `;
+            
+            if (prova.materiais && Array.isArray(prova.materiais)) {
+                html += `
+                    <p><strong>Materiais:</strong></p>
+                    <ul>
+                `;
+                prova.materiais.forEach(material => {
+                    html += `<li>${material}</li>`;
+                });
+                html += `</ul>`;
+            }
+            
+            html += `</div></div>`;
+        });
+
+        html += `</div></div></div>`;
+        container.innerHTML = html;
     }
 
-    renderMetadataResults(analysis) {
-        const container = document.getElementById('metadataResults');
+    displayAntiObjection(antiObjectionData) {
+        if (!antiObjectionData) return;
+
+        const container = document.getElementById('antiObjectionResults');
         if (!container) return;
-        
-        const metadata = analysis.metadata || analysis.metadata_ai || {};
-        
-        if (Object.keys(metadata).length === 0) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-info-circle"></i>
-                        <h4>Metadados da Análise</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <div class="metadata-grid">
-                            <div class="metadata-item">
-                                <span class="metadata-label">Status</span>
-                                <span class="metadata-value">Análise Concluída</span>
-                            </div>
-                            <div class="metadata-item">
-                                <span class="metadata-label">Timestamp</span>
-                                <span class="metadata-value">${new Date().toLocaleString()}</span>
-                            </div>
-                        </div>
-                    </div>
+
+        let html = `
+            <div class="result-section">
+                <div class="result-section-header">
+                    <i class="fas fa-shield-alt"></i>
+                    <h4>Sistema Anti-Objeção</h4>
                 </div>
+                <div class="result-section-content">
+        `;
+
+        // Objeções Universais
+        if (antiObjectionData.objecoes_universais) {
+            html += `
+                <div class="expandable-section">
+                    <div class="expandable-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="expandable-title">
+                            <i class="fas fa-universal-access"></i>
+                            Objeções Universais
+                        </div>
+                        <i class="fas fa-chevron-down expandable-icon"></i>
+                    </div>
+                    <div class="expandable-content">
             `;
-            return;
+            
+            for (const [tipo, objecao] of Object.entries(antiObjectionData.objecoes_universais)) {
+                html += `
+                    <div class="info-card">
+                        <strong>${tipo.toUpperCase()}</strong>
+                        <span>Objeção: ${objecao.objecao || 'N/A'}</span>
+                        <span>Contra-ataque: ${objecao.contra_ataque || 'N/A'}</span>
+                `;
+                
+                if (objecao.scripts_customizados && Array.isArray(objecao.scripts_customizados)) {
+                    html += `<ul>`;
+                    objecao.scripts_customizados.forEach(script => {
+                        html += `<li>${script}</li>`;
+                    });
+                    html += `</ul>`;
+                }
+                
+                html += `</div>`;
+            }
+            
+            html += `</div></div>`;
         }
 
+        html += `</div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayPrePitch(prePitchData) {
+        if (!prePitchData) return;
+
+        const container = document.getElementById('prePitchResults');
+        if (!container) return;
+
+        let html = `
+            <div class="result-section">
+                <div class="result-section-header">
+                    <i class="fas fa-bullseye"></i>
+                    <h4>Pré-Pitch Invisível</h4>
+                </div>
+                <div class="result-section-content">
+        `;
+
+        // Roteiro Completo
+        if (prePitchData.roteiro_completo) {
+            html += `
+                <div class="expandable-section expanded">
+                    <div class="expandable-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="expandable-title">
+                            <i class="fas fa-script"></i>
+                            Roteiro Completo
+                        </div>
+                        <i class="fas fa-chevron-down expandable-icon"></i>
+                    </div>
+                    <div class="expandable-content">
+            `;
+            
+            for (const [secao, dados] of Object.entries(prePitchData.roteiro_completo)) {
+                html += `
+                    <div class="info-card">
+                        <strong>${secao.replace(/_/g, ' ').toUpperCase()}</strong>
+                `;
+                
+                if (typeof dados === 'object') {
+                    for (const [key, value] of Object.entries(dados)) {
+                        html += `<span><strong>${key.replace(/_/g, ' ')}:</strong> ${value}</span>`;
+                    }
+                } else {
+                    html += `<span>${dados}</span>`;
+                }
+                
+                html += `</div>`;
+            }
+            
+            html += `</div></div>`;
+        }
+
+        html += `</div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayPositioning(positioningData) {
+        if (!positioningData) return;
+
+        const container = document.getElementById('positioningResults');
+        if (!container) return;
+
+        let html = `
+            <div class="result-section">
+                <div class="result-section-header">
+                    <i class="fas fa-crosshairs"></i>
+                    <h4>Escopo e Posicionamento</h4>
+                </div>
+                <div class="result-section-content">
+        `;
+
+        if (positioningData.posicionamento_mercado) {
+            html += `
+                <div class="info-card">
+                    <strong>Posicionamento no Mercado</strong>
+                    <span>${positioningData.posicionamento_mercado}</span>
+                </div>
+            `;
+        }
+
+        if (positioningData.proposta_valor) {
+            html += `
+                <div class="info-card">
+                    <strong>Proposta de Valor</strong>
+                    <span>${positioningData.proposta_valor}</span>
+                </div>
+            `;
+        }
+
+        if (positioningData.diferenciais_competitivos && Array.isArray(positioningData.diferenciais_competitivos)) {
+            html += `
+                <div class="info-card">
+                    <strong>Diferenciais Competitivos</strong>
+                    <ul>
+            `;
+            positioningData.diferenciais_competitivos.forEach(diferencial => {
+                html += `<li>${diferencial}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+
+        html += `</div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayCompetition(competitionData) {
+        if (!competitionData || !Array.isArray(competitionData)) return;
+
+        const container = document.getElementById('competitionResults');
+        if (!container) return;
+
+        let html = `
+            <div class="result-section">
+                <div class="result-section-header">
+                    <i class="fas fa-chess"></i>
+                    <h4>Análise de Concorrência</h4>
+                </div>
+                <div class="result-section-content">
+                    <table class="competition-table">
+                        <thead>
+                            <tr>
+                                <th>Concorrente</th>
+                                <th>Forças</th>
+                                <th>Fraquezas</th>
+                                <th>Estratégia</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+
+        competitionData.forEach(competitor => {
+            const forcas = competitor.analise_swot?.forcas || [];
+            const fraquezas = competitor.analise_swot?.fraquezas || [];
+            
+            html += `
+                <tr>
+                    <td class="competitor-name">${competitor.nome || 'Concorrente'}</td>
+                    <td class="competitor-strengths">${forcas.slice(0, 3).join(', ')}</td>
+                    <td class="competitor-weaknesses">${fraquezas.slice(0, 3).join(', ')}</td>
+                    <td>${competitor.estrategia_marketing || 'N/A'}</td>
+                </tr>
+            `;
+        });
+
+        html += `</tbody></table></div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayKeywords(keywordsData) {
+        if (!keywordsData) return;
+
+        const container = document.getElementById('keywordsResults');
+        if (!container) return;
+
+        let html = `
+            <div class="result-section">
+                <div class="result-section-header">
+                    <i class="fas fa-key"></i>
+                    <h4>Estratégia de Palavras-Chave</h4>
+                </div>
+                <div class="result-section-content">
+        `;
+
+        // Palavras primárias
+        if (keywordsData.palavras_primarias && Array.isArray(keywordsData.palavras_primarias)) {
+            html += `
+                <div class="info-card">
+                    <strong>Palavras-Chave Primárias</strong>
+                    <div class="keyword-tags">
+            `;
+            keywordsData.palavras_primarias.forEach(keyword => {
+                html += `<span class="keyword-tag">${keyword}</span>`;
+            });
+            html += `</div></div>`;
+        }
+
+        // Palavras secundárias
+        if (keywordsData.palavras_secundarias && Array.isArray(keywordsData.palavras_secundarias)) {
+            html += `
+                <div class="info-card">
+                    <strong>Palavras-Chave Secundárias</strong>
+                    <div class="keyword-tags">
+            `;
+            keywordsData.palavras_secundarias.slice(0, 20).forEach(keyword => {
+                html += `<span class="keyword-tag secondary">${keyword}</span>`;
+            });
+            html += `</div></div>`;
+        }
+
+        // Long tail
+        if (keywordsData.long_tail && Array.isArray(keywordsData.long_tail)) {
+            html += `
+                <div class="expandable-section">
+                    <div class="expandable-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="expandable-title">
+                            <i class="fas fa-list"></i>
+                            Palavras-Chave Long Tail (${keywordsData.long_tail.length})
+                        </div>
+                        <i class="fas fa-chevron-down expandable-icon"></i>
+                    </div>
+                    <div class="expandable-content">
+                        <div class="keyword-tags">
+            `;
+            keywordsData.long_tail.forEach(keyword => {
+                html += `<span class="keyword-tag long-tail">${keyword}</span>`;
+            });
+            html += `</div></div></div>`;
+        }
+
+        html += `</div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayMetrics(metricsData) {
+        if (!metricsData) return;
+
+        const container = document.getElementById('metricsResults');
+        if (!container) return;
+
+        let html = `
+            <div class="result-section">
+                <div class="result-section-header">
+                    <i class="fas fa-chart-line"></i>
+                    <h4>Métricas de Performance</h4>
+                </div>
+                <div class="result-section-content">
+        `;
+
+        // KPIs principais
+        if (metricsData.kpis_principais && Array.isArray(metricsData.kpis_principais)) {
+            html += `<div class="metrics-grid">`;
+            
+            metricsData.kpis_principais.forEach(kpi => {
+                html += `
+                    <div class="metric-card">
+                        <div class="metric-icon">
+                            <i class="fas fa-bullseye"></i>
+                        </div>
+                        <div class="metric-title">${kpi.metrica || 'Métrica'}</div>
+                        <div class="metric-value">${kpi.objetivo || 'N/A'}</div>
+                        <div class="metric-description">${kpi.frequencia || 'N/A'}</div>
+                    </div>
+                `;
+            });
+            
+            html += `</div>`;
+        }
+
+        // Projeções financeiras
+        if (metricsData.projecoes_financeiras) {
+            html += `
+                <table class="projections-table">
+                    <thead>
+                        <tr>
+                            <th>Cenário</th>
+                            <th>Receita Mensal</th>
+                            <th>Clientes/Mês</th>
+                            <th>Ticket Médio</th>
+                            <th>Margem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            const cenarios = ['cenario_conservador', 'cenario_realista', 'cenario_otimista'];
+            const labels = ['Conservador', 'Realista', 'Otimista'];
+            const classes = ['scenario-conservative', 'scenario-realistic', 'scenario-optimistic'];
+            
+            cenarios.forEach((cenario, index) => {
+                const dados = metricsData.projecoes_financeiras[cenario];
+                if (dados) {
+                    html += `
+                        <tr class="${classes[index]}">
+                            <td class="scenario-label">${labels[index]}</td>
+                            <td>${dados.receita_mensal || 'N/A'}</td>
+                            <td>${dados.clientes_mes || 'N/A'}</td>
+                            <td>${dados.ticket_medio || 'N/A'}</td>
+                            <td>${dados.margem_lucro || 'N/A'}</td>
+                        </tr>
+                    `;
+                }
+            });
+            
+            html += `</tbody></table>`;
+        }
+
+        html += `</div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayFunnel(funnelData) {
+        if (!funnelData) return;
+
+        const container = document.getElementById('funnelResults');
+        if (!container) return;
+
+        let html = `
+            <div class="result-section">
+                <div class="result-section-header">
+                    <i class="fas fa-filter"></i>
+                    <h4>Funil de Vendas Detalhado</h4>
+                </div>
+                <div class="result-section-content">
+        `;
+
+        const fases = ['topo_funil', 'meio_funil', 'fundo_funil'];
+        const labels = ['Topo do Funil', 'Meio do Funil', 'Fundo do Funil'];
+        const icons = ['fas fa-users', 'fas fa-user-friends', 'fas fa-user-check'];
+
+        fases.forEach((fase, index) => {
+            const dados = funnelData[fase];
+            if (dados) {
+                html += `
+                    <div class="info-card">
+                        <strong><i class="${icons[index]}"></i> ${labels[index]}</strong>
+                        <span><strong>Objetivo:</strong> ${dados.objetivo || 'N/A'}</span>
+                `;
+                
+                if (dados.estrategias && Array.isArray(dados.estrategias)) {
+                    html += `<span><strong>Estratégias:</strong></span><ul>`;
+                    dados.estrategias.forEach(estrategia => {
+                        html += `<li>${estrategia}</li>`;
+                    });
+                    html += `</ul>`;
+                }
+                
+                html += `</div>`;
+            }
+        });
+
+        html += `</div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayActionPlan(actionPlanData) {
+        if (!actionPlanData) return;
+
+        const container = document.getElementById('actionPlanResults');
+        if (!container) return;
+
+        let html = `
+            <div class="result-section">
+                <div class="result-section-header">
+                    <i class="fas fa-tasks"></i>
+                    <h4>Plano de Ação Detalhado</h4>
+                </div>
+                <div class="result-section-content">
+                    <div class="action-timeline">
+        `;
+
+        const fases = Object.keys(actionPlanData);
         
-        container.innerHTML = `
+        fases.forEach((fase, index) => {
+            const dados = actionPlanData[fase];
+            if (dados && typeof dados === 'object') {
+                html += `
+                    <div class="timeline-item">
+                        <div class="timeline-marker"></div>
+                        <div class="timeline-content">
+                            <div class="timeline-title">
+                                ${fase.replace(/_/g, ' ').toUpperCase()}
+                                <span class="timeline-duration">${dados.duracao || 'N/A'}</span>
+                            </div>
+                `;
+                
+                if (dados.atividades && Array.isArray(dados.atividades)) {
+                    html += `<div class="timeline-activities">`;
+                    dados.atividades.forEach(atividade => {
+                        html += `
+                            <div class="timeline-activity">
+                                <i class="fas fa-check"></i>
+                                <span>${atividade}</span>
+                            </div>
+                        `;
+                    });
+                    html += `</div>`;
+                }
+                
+                if (dados.investimento) {
+                    html += `<p><strong>Investimento:</strong> ${dados.investimento}</p>`;
+                }
+                
+                html += `</div></div>`;
+            }
+        });
+
+        html += `</div></div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayInsights(insightsData) {
+        if (!insightsData || !Array.isArray(insightsData)) return;
+
+        const container = document.getElementById('insightsResults');
+        if (!container) return;
+
+        let html = `
+            <div class="result-section">
+                <div class="result-section-header">
+                    <i class="fas fa-lightbulb"></i>
+                    <h4>Insights Exclusivos (${insightsData.length})</h4>
+                </div>
+                <div class="result-section-content">
+                    <div class="insights-showcase">
+        `;
+
+        insightsData.forEach((insight, index) => {
+            html += `
+                <div class="insight-card">
+                    <div class="insight-number">${index + 1}</div>
+                    <div class="insight-content">${insight}</div>
+                </div>
+            `;
+        });
+
+        html += `</div></div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayFuturePredictions(futureData) {
+        if (!futureData) return;
+
+        const container = document.getElementById('futureResults');
+        if (!container) return;
+
+        let html = `
+            <div class="result-section">
+                <div class="result-section-header">
+                    <i class="fas fa-crystal-ball"></i>
+                    <h4>Predições do Futuro</h4>
+                </div>
+                <div class="result-section-content">
+        `;
+
+        // Tendências atuais
+        if (futureData.tendencias_atuais) {
+            html += `
+                <div class="expandable-section">
+                    <div class="expandable-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="expandable-title">
+                            <i class="fas fa-trending-up"></i>
+                            Tendências Atuais
+                        </div>
+                        <i class="fas fa-chevron-down expandable-icon"></i>
+                    </div>
+                    <div class="expandable-content">
+            `;
+            
+            const tendencias = futureData.tendencias_atuais.tendencias_relevantes || {};
+            for (const [nome, dados] of Object.entries(tendencias)) {
+                html += `
+                    <div class="info-card">
+                        <strong>${nome.replace(/_/g, ' ').toUpperCase()}</strong>
+                        <span><strong>Fase:</strong> ${dados.fase_atual || 'N/A'}</span>
+                        <span><strong>Impacto:</strong> ${dados.impacto_esperado || 'N/A'}</span>
+                        <span><strong>Timeline:</strong> ${dados.timeline || 'N/A'}</span>
+                    </div>
+                `;
+            }
+            
+            html += `</div></div>`;
+        }
+
+        // Oportunidades emergentes
+        if (futureData.oportunidades_emergentes && Array.isArray(futureData.oportunidades_emergentes)) {
+            html += `
+                <div class="expandable-section">
+                    <div class="expandable-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="expandable-title">
+                            <i class="fas fa-rocket"></i>
+                            Oportunidades Emergentes (${futureData.oportunidades_emergentes.length})
+                        </div>
+                        <i class="fas fa-chevron-down expandable-icon"></i>
+                    </div>
+                    <div class="expandable-content">
+            `;
+            
+            futureData.oportunidades_emergentes.forEach(oportunidade => {
+                html += `
+                    <div class="info-card">
+                        <strong>${oportunidade.nome || 'Oportunidade'}</strong>
+                        <span>${oportunidade.descricao || 'N/A'}</span>
+                        <span><strong>Potencial:</strong> ${oportunidade.potencial_mercado || 'N/A'}</span>
+                        <span><strong>Timeline:</strong> ${oportunidade.timeline || 'N/A'}</span>
+                        <span><strong>ROI:</strong> ${oportunidade.roi_esperado || 'N/A'}</span>
+                    </div>
+                `;
+            });
+            
+            html += `</div></div>`;
+        }
+
+        html += `</div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayResearch(researchData) {
+        if (!researchData) return;
+
+        const container = document.getElementById('researchResults');
+        if (!container) return;
+
+        let html = `
+            <div class="result-section">
+                <div class="result-section-header">
+                    <i class="fas fa-search"></i>
+                    <h4>Pesquisa Web Massiva</h4>
+                </div>
+                <div class="result-section-content">
+                    <div class="research-content">
+        `;
+
+        // Estatísticas da pesquisa
+        if (researchData.estatisticas) {
+            html += `
+                <div class="research-stats">
+                    <h5>Estatísticas da Pesquisa</h5>
+                    <div class="stats-grid">
+            `;
+            
+            for (const [key, value] of Object.entries(researchData.estatisticas)) {
+                html += `
+                    <div class="stat-item">
+                        <span class="stat-label">${key.replace(/_/g, ' ')}</span>
+                        <span class="stat-value">${value}</span>
+                    </div>
+                `;
+            }
+            
+            html += `</div></div>`;
+        }
+
+        // Queries executadas
+        if (researchData.queries_executadas && Array.isArray(researchData.queries_executadas)) {
+            html += `
+                <div class="expandable-section">
+                    <div class="expandable-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="expandable-title">
+                            <i class="fas fa-search"></i>
+                            Queries Executadas (${researchData.queries_executadas.length})
+                        </div>
+                        <i class="fas fa-chevron-down expandable-icon"></i>
+                    </div>
+                    <div class="expandable-content">
+                        <ul class="insight-list">
+            `;
+            
+            researchData.queries_executadas.forEach(query => {
+                html += `
+                    <li class="insight-item">
+                        <i class="fas fa-search"></i>
+                        <span class="insight-text">${query}</span>
+                    </li>
+                `;
+            });
+            
+            html += `</ul></div></div>`;
+        }
+
+        // Fontes consultadas
+        if (researchData.fontes && Array.isArray(researchData.fontes)) {
+            html += `
+                <div class="expandable-section">
+                    <div class="expandable-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="expandable-title">
+                            <i class="fas fa-link"></i>
+                            Fontes Consultadas (${researchData.fontes.length})
+                        </div>
+                        <i class="fas fa-chevron-down expandable-icon"></i>
+                    </div>
+                    <div class="expandable-content">
+                        <div class="results-list">
+            `;
+            
+            researchData.fontes.slice(0, 20).forEach(fonte => {
+                html += `
+                    <div class="result-item">
+                        <h5>${fonte.title || 'Sem título'}</h5>
+                        <div class="result-url">${fonte.url || 'N/A'}</div>
+                    </div>
+                `;
+            });
+            
+            html += `</div></div></div>`;
+        }
+
+        html += `</div></div></div>`;
+        container.innerHTML = html;
+    }
+
+    displayMetadata(metadataData) {
+        if (!metadataData) return;
+
+        const container = document.getElementById('metadataResults');
+        if (!container) return;
+
+        let html = `
             <div class="result-section">
                 <div class="result-section-header">
                     <i class="fas fa-info-circle"></i>
-                    <h4>Metadados da Análise</h4>
+                    <h4>Informações da Análise</h4>
                 </div>
                 <div class="result-section-content">
-                    <div class="metadata-grid">
-                        <div class="metadata-item">
-                            <span class="metadata-label">Tempo de Processamento</span>
-                            <span class="metadata-value">${metadata.processing_time_formatted || 'N/A'}</span>
-                        </div>
-                        <div class="metadata-item">
-                            <span class="metadata-label">Engine de Análise</span>
-                            <span class="metadata-value">${metadata.analysis_engine || 'N/A'}</span>
-                        </div>
-                        <div class="metadata-item">
-                            <span class="metadata-label">Score de Qualidade</span>
-                            <span class="metadata-value" style="color: ${(metadata.quality_score || 0) >= 80 ? 'var(--accent-tertiary)' : (metadata.quality_score || 0) >= 60 ? 'var(--accent-gold)' : '#ff6b6b'}">${metadata.quality_score || 'N/A'}%</span>
-                        </div>
-                        <div class="metadata-item">
-                            <span class="metadata-label">Fontes Analisadas</span>
-                            <span class="metadata-value">${metadata.real_data_sources || 0}</span>
-                        </div>
-                        <div class="metadata-item">
-                            <span class="metadata-label">Conteúdo Analisado</span>
-                            <span class="metadata-value">${(metadata.total_content_analyzed || 0).toLocaleString()} chars</span>
-                        </div>
-                        <div class="metadata-item">
-                            <span class="metadata-label">Garantia de Dados</span>
-                            <span class="metadata-value" style="color: ${metadata.simulation_free_guarantee ? 'var(--accent-tertiary)' : 'var(--accent-gold)'};">
-                                ${metadata.simulation_free_guarantee ? '100% REAIS' : 'DADOS MISTOS'}
-                            </span>
-                        </div>
-                    </div>
-                    
-                    ${metadata.note || metadata.recommendation ? `
-                        <div style="margin-top: 20px; padding: 15px; background: var(--bg-surface); border-radius: 12px; border-left: 4px solid var(--accent-primary);">
-                            <strong style="color: var(--accent-primary);">ℹ️ Informação:</strong>
-                            <span style="color: var(--text-secondary);">
-                                ${metadata.note || metadata.recommendation}
-                            </span>
-                        </div>
-                    ` : ''}
-                </div>
+        `;
+
+        // Indicador de qualidade dos dados
+        html += `
+            <div class="data-quality-indicator">
+                <span class="quality-label">Qualidade dos Dados:</span>
+                <span class="quality-value real-data">100% DADOS REAIS</span>
             </div>
         `;
-    }
 
-    // Métodos de renderização simplificados para outras seções
-    renderCompetitionResults(analysis) {
-        const container = document.getElementById('competitionResults');
-        if (!container) return;
+        // Metadata grid
+        html += `<div class="metadata-grid">`;
         
-        const competition = analysis.analise_concorrencia_detalhada || 
-                           analysis.analise_concorrencia_profunda ||
-                           analysis.competition_data;
+        const metadataItems = [
+            { label: 'Tempo de Processamento', value: metadataData.processing_time_formatted || 'N/A' },
+            { label: 'Engine de Análise', value: metadataData.analysis_engine || 'N/A' },
+            { label: 'Gerado em', value: metadataData.generated_at ? new Date(metadataData.generated_at).toLocaleString('pt-BR') : 'N/A' },
+            { label: 'Score de Qualidade', value: metadataData.quality_score ? `${metadataData.quality_score}%` : 'N/A' },
+            { label: 'Fontes de Dados', value: metadataData.real_data_sources || 'N/A' },
+            { label: 'Conteúdo Analisado', value: metadataData.total_content_analyzed ? `${metadataData.total_content_analyzed.toLocaleString()} chars` : 'N/A' }
+        ];
         
-        if (competition) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-chess"></i>
-                        <h4>Análise de Concorrência</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <div class="success-message">
-                            ✅ Análise detalhada da concorrência foi gerada com sucesso.
-                        </div>
-                        <p style="color: var(--text-secondary); margin-top: 15px;">
-                            Dados completos disponíveis no download PDF ou na resposta JSON completa.
-                        </p>
-                    </div>
+        metadataItems.forEach(item => {
+            html += `
+                <div class="metadata-item">
+                    <span class="metadata-label">${item.label}</span>
+                    <span class="metadata-value">${item.value}</span>
                 </div>
             `;
-        } else {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-chess"></i>
-                        <h4>Análise de Concorrência</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <div class="error-message">
-                            Análise de concorrência não foi gerada. Forneça informações sobre concorrentes para uma análise mais completa.
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-    }
-
-    renderPositioningResults(analysis) {
-        const container = document.getElementById('positioningResults');
-        if (!container) return;
+        });
         
-        const positioning = analysis.escopo || 
-                           analysis.escopo_posicionamento ||
-                           analysis.positioning_data;
-        
-        if (positioning) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-bullseye"></i>
-                        <h4>Posicionamento e Escopo</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <div class="success-message">
-                            ✅ Estratégia de posicionamento foi desenvolvida com sucesso.
+        html += `</div>`;
+
+        // Informações de arquivos locais
+        if (metadataData.local_files) {
+            html += `
+                <div class="expandable-section">
+                    <div class="expandable-header" onclick="this.parentElement.classList.toggle('expanded')">
+                        <div class="expandable-title">
+                            <i class="fas fa-folder"></i>
+                            Arquivos Locais Salvos (${metadataData.local_files.files_created || 0})
                         </div>
-                        <p style="color: var(--text-secondary); margin-top: 15px;">
-                            Estratégia completa disponível no download PDF ou na resposta JSON completa.
-                        </p>
+                        <i class="fas fa-chevron-down expandable-icon"></i>
                     </div>
-                </div>
+                    <div class="expandable-content">
+                        <p>Análise salva em arquivos TXT separados:</p>
+                        <ul class="insight-list">
             `;
-        } else {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-bullseye"></i>
-                        <h4>Posicionamento e Escopo</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <div class="error-message">
-                            Estratégia de posicionamento não foi gerada. Adicione mais detalhes sobre seu produto/serviço.
-                        </div>
-                    </div>
-                </div>
-            `;
+            
+            if (metadataData.local_files.files && Array.isArray(metadataData.local_files.files)) {
+                metadataData.local_files.files.forEach(file => {
+                    html += `
+                        <li class="insight-item">
+                            <i class="fas fa-file-alt"></i>
+                            <span class="insight-text">${file.name} (${file.type}) - ${(file.size / 1024).toFixed(1)} KB</span>
+                        </li>
+                    `;
+                });
+            }
+            
+            html += `</ul></div></div>`;
+        }
+
+        html += `</div></div>`;
+        container.innerHTML = html;
+    }
+
+    enableResultActions() {
+        const downloadPdfBtn = document.getElementById('downloadPdfBtn');
+        const saveJsonBtn = document.getElementById('saveJsonBtn');
+
+        if (downloadPdfBtn) {
+            downloadPdfBtn.style.display = 'inline-flex';
+            downloadPdfBtn.onclick = () => this.downloadPDF();
+        }
+
+        if (saveJsonBtn) {
+            saveJsonBtn.style.display = 'inline-flex';
         }
     }
 
-    renderKeywordsResults(analysis) {
-        const container = document.getElementById('keywordsResults');
-        if (container && analysis.estrategia_palavras_chave) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-tags"></i>
-                        <h4>Estratégia de Palavras-Chave</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <p style="color: var(--text-primary);">Estratégia completa de palavras-chave disponível nos dados completos.</p>
-                    </div>
-                </div>
-            `;
+    async downloadPDF() {
+        if (!this.currentAnalysis) {
+            this.showError('Nenhuma análise disponível para download');
+            return;
         }
-    }
 
-    renderMetricsResults(analysis) {
-        const container = document.getElementById('metricsResults');
-        if (container && analysis.metricas_performance_detalhadas) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-chart-line"></i>
-                        <h4>Métricas de Performance</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <p style="color: var(--text-primary);">Métricas detalhadas de performance disponíveis nos dados completos.</p>
-                    </div>
-                </div>
-            `;
-        }
-    }
-
-    renderActionPlanResults(analysis) {
-        const container = document.getElementById('actionPlanResults');
-        if (container && analysis.plano_acao_detalhado) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-tasks"></i>
-                        <h4>Plano de Ação Detalhado</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <p style="color: var(--text-primary);">Plano de ação completo disponível nos dados completos.</p>
-                    </div>
-                </div>
-            `;
-        }
-    }
-
-    renderVisualProofsResults(analysis) {
-        const container = document.getElementById('visualProofsResults');
-        if (container && analysis.provas_visuais_sugeridas) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-eye"></i>
-                        <h4>Provas Visuais Instantâneas</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <p style="color: var(--text-primary);">Sistema completo de provas visuais disponível nos dados completos.</p>
-                    </div>
-                </div>
-            `;
-        }
-    }
-
-    renderAntiObjectionResults(analysis) {
-        const container = document.getElementById('antiObjectionResults');
-        if (container && analysis.sistema_anti_objecao) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-shield-alt"></i>
-                        <h4>Sistema Anti-Objeção</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <p style="color: var(--text-primary);">Sistema completo anti-objeção disponível nos dados completos.</p>
-                    </div>
-                </div>
-            `;
-        }
-    }
-
-    renderPrePitchResults(analysis) {
-        const container = document.getElementById('prePitchResults');
-        if (container && analysis.pre_pitch_invisivel) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-magic"></i>
-                        <h4>Pré-Pitch Invisível</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <p style="color: var(--text-primary);">Sistema completo de pré-pitch disponível nos dados completos.</p>
-                    </div>
-                </div>
-            `;
-        }
-    }
-
-    renderFutureResults(analysis) {
-        const container = document.getElementById('futureResults');
-        if (container && analysis.predicoes_futuro_completas) {
-            container.innerHTML = `
-                <div class="result-section">
-                    <div class="result-section-header">
-                        <i class="fas fa-crystal-ball"></i>
-                        <h4>Predições do Futuro</h4>
-                    </div>
-                    <div class="result-section-content">
-                        <p style="color: var(--text-primary);">Predições completas do futuro do mercado disponíveis nos dados completos.</p>
-                    </div>
-                </div>
-            `;
-        }
-    }
-
-    enablePdfDownload(analysis) {
-        const downloadBtn = document.getElementById('downloadPdfBtn');
-        if (downloadBtn) {
-            downloadBtn.style.display = 'inline-flex';
-            downloadBtn.onclick = () => this.downloadPdf(analysis);
-        }
-    }
-
-    async downloadPdf(analysis) {
         try {
-            window.app?.showInfo('Gerando relatório PDF...');
-
             const response = await fetch('/api/generate_pdf', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(analysis)
+                body: JSON.stringify(this.currentAnalysis)
             });
 
             if (response.ok) {
@@ -1294,44 +1280,161 @@ class AnalysisManager {
                 a.download = `analise_mercado_${new Date().toISOString().slice(0, 10)}.pdf`;
                 document.body.appendChild(a);
                 a.click();
-                document.body.removeChild(a);
                 window.URL.revokeObjectURL(url);
-
-                window.app?.showSuccess('Relatório PDF baixado com sucesso!');
+                document.body.removeChild(a);
+                
+                this.showSuccess('PDF baixado com sucesso!');
             } else {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Erro ao gerar PDF');
+                this.showError('Erro ao gerar PDF');
             }
 
         } catch (error) {
-            console.error('Erro ao baixar PDF:', error);
-            window.app?.showError(`Erro ao gerar relatório PDF: ${error.message}`);
+            this.showError('Erro ao baixar PDF: ' + error.message);
         }
     }
-    
-    // Método para salvar análise localmente
+
     saveAnalysisLocally(analysis) {
-        try {
-            const dataStr = JSON.stringify(analysis, null, 2);
-            const dataBlob = new Blob([dataStr], {type: 'application/json'});
-            const url = URL.createObjectURL(dataBlob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `analise_completa_${new Date().toISOString().slice(0, 10)}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            
-            window.app?.showSuccess('Análise completa salva localmente!');
-        } catch (error) {
-            console.error('Erro ao salvar análise:', error);
-            window.app?.showError('Erro ao salvar análise localmente');
+        if (!analysis) {
+            this.showError('Nenhuma análise disponível para salvar');
+            return;
         }
+
+        const dataStr = JSON.stringify(analysis, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `analise_${analysis.metadata?.generated_at?.slice(0, 10) || new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        
+        URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        this.showSuccess('Análise salva localmente!');
+    }
+
+    // Métodos de teste
+    async testExtraction() {
+        try {
+            const response = await fetch('/api/test_extraction', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: 'https://g1.globo.com/tecnologia/' })
+            });
+            
+            const result = await response.json();
+            console.log('Teste de Extração:', result);
+            
+            if (result.success) {
+                this.showSuccess(`Extração OK: ${result.content_length} caracteres`);
+            } else {
+                this.showError(`Extração falhou: ${result.error}`);
+            }
+        } catch (error) {
+            this.showError('Erro no teste: ' + error.message);
+        }
+    }
+
+    async testSearch() {
+        try {
+            const response = await fetch('/api/test_search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: 'mercado digital Brasil 2024' })
+            });
+            
+            const result = await response.json();
+            console.log('Teste de Busca:', result);
+            
+            if (result.success) {
+                this.showSuccess(`Busca OK: ${result.results_count} resultados`);
+            } else {
+                this.showError(`Busca falhou: ${result.error}`);
+            }
+        } catch (error) {
+            this.showError('Erro no teste: ' + error.message);
+        }
+    }
+
+    async showExtractorStats() {
+        try {
+            const response = await fetch('/api/extractor_stats');
+            const result = await response.json();
+            console.log('Estatísticas dos Extratores:', result);
+            
+            if (result.success) {
+                const stats = result.stats;
+                let message = 'Estatísticas dos Extratores:\n';
+                
+                for (const [name, data] of Object.entries(stats)) {
+                    if (name !== 'global') {
+                        message += `${name}: ${data.available ? 'Ativo' : 'Inativo'}\n`;
+                    }
+                }
+                
+                alert(message);
+            }
+        } catch (error) {
+            this.showError('Erro ao obter stats: ' + error.message);
+        }
+    }
+
+    async resetExtractors() {
+        try {
+            const response = await fetch('/api/reset_extractors', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.showSuccess('Extratores resetados com sucesso!');
+            } else {
+                this.showError('Erro ao resetar extratores');
+            }
+        } catch (error) {
+            this.showError('Erro no reset: ' + error.message);
+        }
+    }
+
+    showError(message) {
+        this.showAlert(message, 'error');
+    }
+
+    showSuccess(message) {
+        this.showAlert(message, 'success');
+    }
+
+    showAlert(message, type = 'info') {
+        // Remove alertas existentes
+        const existingAlerts = document.querySelectorAll('.alert');
+        existingAlerts.forEach(alert => alert.remove());
+
+        const alert = document.createElement('div');
+        alert.className = `alert alert-${type}`;
+        alert.textContent = message;
+
+        document.body.appendChild(alert);
+
+        // Remove após 5 segundos
+        setTimeout(() => {
+            if (alert.parentNode) {
+                alert.remove();
+            }
+        }, 5000);
     }
 }
 
-// Initialize analysis manager when DOM is loaded
+// Inicializa quando DOM estiver pronto
 document.addEventListener('DOMContentLoaded', () => {
     window.analysisManager = new AnalysisManager();
+    
+    // Adiciona ao objeto global app se existir
+    if (window.app) {
+        window.app.analysisManager = window.analysisManager;
+    }
 });
